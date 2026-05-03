@@ -2093,6 +2093,33 @@ function bindUIEvents() {
 
     $(document).on('click', '#sc_force_summarize', async function () {
         const s = getSettings();
+        const { chat } = SillyTavern.getContext();
+        const store = getChatStore();
+
+        const ghostedCount = chat.filter(m => m?.extra?.sc_ghosted).length;
+
+        // Auto-recover corrupted ghosting state: everything ghosted but nothing summarized yet.
+        if (store.summarizedUpTo < 0 && ghostedCount > 0) {
+            trace('  Detected ghost-state mismatch. summarizedUpTo = -1 but ghostedCount =', ghostedCount);
+            toastr.warning(
+                `Detected ${ghostedCount} ghosted messages with no saved summary index. Restoring visibility first...`,
+                'Summaryception',
+                { timeOut: 3500 }
+            );
+            await unghostAllMessages();
+            await saveChatStore();
+
+            try {
+                const ctx = SillyTavern.getContext();
+                if (ctx.saveChat) await ctx.saveChat();
+            } catch (e) {
+                log('Could not save chat after ghost-state recovery:', e);
+            }
+
+            toastr.success('Recovered ghosted messages. Re-running force summarization now.', 'Summaryception', { timeOut: 2500 });
+        }
+
+
         if (!s.enabled) {
             toastr.warning('Enable Summaryception first.');
             return;
@@ -2108,7 +2135,6 @@ function bindUIEvents() {
         try {
             catchupDismissed = false;
 
-            const { chat } = SillyTavern.getContext();
             const allAssistantTurns = getAssistantTurns(chat);
             let visibleTurns = allAssistantTurns.filter(t => !chat[t.index].extra?.sc_ghosted);
 
