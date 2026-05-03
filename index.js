@@ -1015,7 +1015,10 @@ async function summarizeOneBatch(visibleTurns) {
         }
 
         if (!store.layers[0]) store.layers[0] = [];
-        const passageStart = store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1;
+        const passageStart = Math.max(
+            batch[0].index,
+            store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1
+        );
 
         // ─── SANITY CHECK ───
         if (passageStart > endIdx) {
@@ -1115,7 +1118,10 @@ async function summarizeOneBatchFromTurns(visibleTurns) {
     if (!store.layers[0]) store.layers[0] = [];
 
     // ─── FIX: Start from the message AFTER the last summarized one ───
-    const passageStart = store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1;
+    const passageStart = Math.max(
+        batch[0].index,
+        store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1
+    );
 
     trace('  passageStart:', passageStart, 'endIdx:', endIdx);
 
@@ -2111,6 +2117,10 @@ function bindUIEvents() {
             trace('  visibleTurns after repair:', visibleTurns.length);
             trace('  unsummarizedVisibleTurns:', unsummarizedVisibleTurns.length);
             trace('  summarizedUpTo:', store.summarizedUpTo);
+            if (unsummarizedVisibleTurns.length > 0) {
+                trace('  first unsummarized index:', unsummarizedVisibleTurns[0].index);
+                trace('  last unsummarized index:', unsummarizedVisibleTurns[unsummarizedVisibleTurns.length - 1].index);
+            }
 
             // Standard path: summarize until we are back under the verbatim window.
             if (visibleTurns.length > s.verbatimTurns) {
