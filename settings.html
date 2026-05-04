@@ -23,6 +23,13 @@
                 </label>
             </div>
 
+            <!-- ═══ Stop hiding verbatim turns ═══ -->
+            <label class="checkbox_label" for="sc_disable_ghosting">
+                <input type="checkbox" id="sc_disable_ghosting" />
+                <span>Disable Message Hiding</span>
+                <small class="sc-hint">Messages will still be summarized and excluded from LLM context, but won't be visually hidden. Useful for compatibility with other extensions (QVink, MemoryBooks, etc.).</small>
+            </label>
+
             <!-- ═══ Actions ═══ -->
             <div class="sc-button-row">
                 <button id="sc_force_summarize" class="menu_button">

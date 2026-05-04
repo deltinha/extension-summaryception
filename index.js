@@ -1,5 +1,5 @@
 /**
- * Summaryception v5.4.0 — Layered Recursive Summarization for SillyTavern
+ * Summaryception v5.5.0 — Layered Recursive Summarization for SillyTavern
  *
  * NON-DESTRUCTIVE: Uses SillyTavern's native /hide and /unhide commands
  * to exclude summarized messages from LLM context while keeping them
@@ -52,6 +52,7 @@ const defaultSettings = Object.freeze({
     savedCustomPrompts: {},        // { name: promptText } — named custom prompt slots
     lastCustomPrompt: '',          // Auto-saved when switching away from custom
     pauseSummarization: false,  // true = stop processing, keep injecting
+    disableGhosting: false,  // true = mark as summarized but don't hide messages
 
     stripPatterns: [
         '<|channel>thought',
@@ -260,10 +261,11 @@ function getPlayerName() {
 // ─── Message Hiding (Ghosting via native /hide /unhide) ──────────────
 async function repairGhostingForRange(startIdx, endIdx) {
     trace('>>> ENTERING repairGhostingForRange');
-    trace('  startIdx:', startIdx, 'endIdx:', endIdx);
+    trace(' startIdx:', startIdx, 'endIdx:', endIdx);
 
     const { chat } = SillyTavern.getContext();
     const store = getChatStore();
+    const s = getSettings();
     let repaired = 0;
     let skipped = 0;
 
@@ -271,33 +273,28 @@ async function repairGhostingForRange(startIdx, endIdx) {
         const m = chat[i];
         if (!m) continue;
 
-        // Skip if already ghosted
         if (m.extra?.sc_ghosted) {
             skipped++;
             continue;
         }
 
-        // Skip if user-hidden (not by us)
         if (m.is_hidden && !m.extra?.sc_ghosted) {
-            trace('  Skipping message ' + i + ' - user-hidden');
+            trace(' Skipping message ' + i + ' - user-hidden');
             skipped++;
             continue;
         }
 
-        // Skip system/empty messages
         if (m.is_system || !m.mes?.trim()) {
             skipped++;
             continue;
         }
 
-        // Skip user messages
         if (m.is_user) {
             skipped++;
             continue;
         }
 
-        // This is an assistant message that should be ghosted but isn't
-        trace('  Ghosting message ' + i);
+        trace(' Ghosting message ' + i);
         m.extra = m.extra || {};
         m.extra.sc_ghosted = true;
 
@@ -305,15 +302,20 @@ async function repairGhostingForRange(startIdx, endIdx) {
             store.ghostedIndices.push(i);
         }
 
-        try {
-            await SillyTavern.getContext().executeSlashCommandsWithOptions(`/hide ${i}`, { showOutput: false });
+        // Only visually hide if ghosting is enabled
+        if (!s.disableGhosting) {
+            try {
+                await SillyTavern.getContext().executeSlashCommandsWithOptions(`/hide ${i}`, { showOutput: false });
+                repaired++;
+            } catch (e) {
+                console.error(LOG_PREFIX, 'Failed to ghost message ' + i + ':', e);
+            }
+        } else {
             repaired++;
-        } catch (e) {
-            console.error(LOG_PREFIX, 'Failed to ghost message ' + i + ':', e);
         }
     }
 
-    trace('  Repaired:', repaired, 'Skipped:', skipped);
+    trace(' Repaired:', repaired, 'Skipped:', skipped);
     await saveChatStore();
     trace('<<< EXITING repairGhostingForRange');
     return repaired;
@@ -334,13 +336,17 @@ async function ghostMessage(messageIndex) {
         store.ghostedIndices.push(messageIndex);
     }
 
-    try {
-        await SillyTavern.getContext().executeSlashCommandsWithOptions(`/hide ${messageIndex}`, { showOutput: false });
-    } catch (e) {
-        log(`Failed to hide message ${messageIndex}:`, e);
+    // Only visually hide if ghosting is enabled
+    const s = getSettings();
+    if (!s.disableGhosting) {
+        try {
+            await SillyTavern.getContext().executeSlashCommandsWithOptions(`/hide ${messageIndex}`, { showOutput: false });
+        } catch (e) {
+            log(`Failed to hide message ${messageIndex}:`, e);
+        }
     }
 
-    log(`Ghosted message at index ${messageIndex}`);
+    log(`Ghosted message at index ${messageIndex}${s.disableGhosting ? ' (hiding disabled)' : ''}`);
 }
 
 async function unghostAllMessages() {
@@ -408,8 +414,9 @@ async function unghostAllMessages() {
 async function ghostMessagesUpTo(endIndex) {
     const { chat } = SillyTavern.getContext();
     const store = getChatStore();
+    const s = getSettings();
 
-    const progressToast = toastr.info(
+    const progressToast = !s.disableGhosting ? toastr.info(
         `Hiding messages: 0 / ${endIndex + 1}`,
         'Summaryception — Ghosting',
         {
@@ -417,7 +424,7 @@ async function ghostMessagesUpTo(endIndex) {
             extendedTimeOut: 0,
             tapToDismiss: false,
         }
-    );
+    ) : null;
 
     let processed = 0;
     for (let i = 0; i <= endIndex; i++) {
@@ -428,7 +435,6 @@ async function ghostMessagesUpTo(endIndex) {
         if (msg.extra.sc_ghosted) continue;
 
         // Check if the message is already hidden by the user (not by us)
-        // If so, skip it — don't claim ownership of a user-hidden message
         if (msg.is_hidden) {
             log(`Skipping message ${i} — already hidden by user`);
             continue;
@@ -441,14 +447,17 @@ async function ghostMessagesUpTo(endIndex) {
             store.ghostedIndices.push(i);
         }
 
-        try {
-            await SillyTavern.getContext().executeSlashCommandsWithOptions(`/hide ${i}`, { showOutput: false });
-        } catch (e) {
-            log(`Failed to hide message ${i}:`, e);
+        // Only visually hide if ghosting is enabled
+        if (!s.disableGhosting) {
+            try {
+                await SillyTavern.getContext().executeSlashCommandsWithOptions(`/hide ${i}`, { showOutput: false });
+            } catch (e) {
+                log(`Failed to hide message ${i}:`, e);
+            }
         }
 
         processed++;
-        if (processed % 10 === 0) {
+        if (!s.disableGhosting && progressToast && processed % 10 === 0) {
             const pct = Math.round((i / (endIndex + 1)) * 100);
             $(progressToast).find('.toast-message').text(
                 `Hiding messages: ${i} / ${endIndex + 1} (${pct}%)`
@@ -456,8 +465,8 @@ async function ghostMessagesUpTo(endIndex) {
         }
     }
 
-    toastr.clear(progressToast);
-    log(`Ghosted messages from index 0 to ${endIndex}`);
+    if (progressToast) toastr.clear(progressToast);
+    log(`Ghosted messages from index 0 to ${endIndex}${s.disableGhosting ? ' (hiding disabled — metadata only)' : ''}`);
 }
 
 // ─── Assistant Turn Utilities ────────────────────────────────────────
@@ -1501,6 +1510,7 @@ function updateUI() {
 
         $('#sc_enabled').prop('checked', s.enabled);
         $('#sc_pause_summarization').prop('checked', s.pauseSummarization);
+        $('#sc_disable_ghosting').prop('checked', s.disableGhosting);
         $('#sc_verbatim_turns').val(s.verbatimTurns);
         $('#sc_verbatim_turns_val').text(s.verbatimTurns);
         $('#sc_turns_per_summary').val(s.turnsPerSummary);
@@ -1546,7 +1556,11 @@ function updateUI() {
         } catch (e) { /* no chat loaded */ }
 
         let statsHtml = '';
-        statsHtml += `<div class="sc-layer-stat">👻 <strong>${ghostedCount}</strong> messages ghosted (hidden from LLM, visible to you)</div>`;
+        if (s.disableGhosting) {
+            statsHtml += `<div class="sc-layer-stat">👻 <strong>${ghostedCount}</strong> messages ghosted (metadata only — not visually hidden)</div>`;
+        } else {
+            statsHtml += `<div class="sc-layer-stat">👻 <strong>${ghostedCount}</strong> messages ghosted (hidden from LLM, visible to you)</div>`;
+        }
         if (store.layers) {
             for (let i = store.layers.length - 1; i >= 0; i--) {
                 const layer = store.layers[i];
@@ -1563,6 +1577,7 @@ function updateUI() {
         if (!store.layers?.length || store.layers.every(l => !l || l.length === 0)) {
             statsHtml = '<div class="sc-layer-stat sc-muted">No summaries yet for this chat.</div>';
         }
+
         $('#sc_layer_stats').html(statsHtml);
 
         const preview = assembleSummaryBlock();
@@ -1824,6 +1839,19 @@ function bindUIEvents() {
         }
     });
 
+    $(document).on('change', '#sc_disable_ghosting', function () {
+        getSettings().disableGhosting = $(this).prop('checked');
+        saveSettings();
+
+        if ($(this).prop('checked')) {
+            toastr.info(
+                'Message hiding disabled. Summarized messages will remain visible but still be excluded from LLM context via the sc_ghosted flag.',
+                'Summaryception',
+                { timeOut: 5000 }
+            );
+        }
+    });
+
     $(document).on('input', '#sc_summarizer_response_length', function () {
         getSettings().summarizerResponseLength = parseInt($(this).val(), 10) || 0;
         saveSettings();
@@ -1867,6 +1895,11 @@ function bindUIEvents() {
 
     $(document).on('change', '#sc_debug_mode', function () {
         getSettings().debugMode = $(this).prop('checked');
+        saveSettings();
+    });
+
+    $(document).on('change', '#sc_trace_mode', function () {
+        getSettings().traceMode = $(this).prop('checked');
         saveSettings();
     });
 
@@ -2554,6 +2587,6 @@ async function fetchProfilesFallback(selectElement, currentValue) {
     eventSource.on(event_types.APP_READY, () => {
         updateInjection();
         updateUI();
-        console.log(LOG_PREFIX, 'v5.4.0 loaded. Connection Settings available');
+        console.log(LOG_PREFIX, 'v5.5.0 loaded. Connection Settings available');
     });
 })();
