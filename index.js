@@ -85,6 +85,9 @@ Write in short phrases, no more than 20; output must be a single line:`,
     openaiKey: '',
     openaiModel: '',
     openaiMaxTokens: 0,                   // 0 = no limit (provider default)
+
+    // Presence group chat integration
+    presenceGroupMemory: false,
 });
 
 // ─── Prompt Presets ──────────────────────────────────────────────────
