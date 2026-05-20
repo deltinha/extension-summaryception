@@ -24,6 +24,8 @@ import {
     getMemberStoreKey,
     summarizeForMember,
     runParallelMemberCatchup,
+    assembleSummaryBlockForMember,
+    getMembersWithStores,
 } from './presence.js';
 
 const MODULE_NAME = 'summaryception';
@@ -1487,6 +1489,19 @@ function assembleSummaryBlock() {
     return s.injectionTemplate.replace('{{summary}}', snippets.join(' '));
 }
 
+function getSelectedMemberAvatar() {
+    const val = $('#sc_preview_member_select').val();
+    return val || null;
+}
+
+function getActiveStore() {
+    if (isPresenceGroupMode()) {
+        const avatar = getSelectedMemberAvatar();
+        return avatar ? getMemberStore(avatar) : null;
+    }
+    return getChatStore();
+}
+
 // ─── Injection via setExtensionPrompt ────────────────────────────────
 
 function updateInjection() {
@@ -1783,8 +1798,31 @@ function updateUI() {
 
         $('#sc_layer_stats').html(statsHtml);
 
-        const preview = assembleSummaryBlock();
-        $('#sc_preview').val(preview || '(empty — no summaries yet)');
+        if (isPresenceGroupMode()) {
+            const membersWithStores = getMembersWithStores();
+            const $sel = $('#sc_preview_member_select');
+            const prevVal = $sel.val();
+            $sel.empty();
+            for (const m of membersWithStores) {
+                $sel.append($('<option></option>').val(m.avatar).text(m.name));
+            }
+            if (membersWithStores.length > 0) {
+                if (prevVal && membersWithStores.some(m => m.avatar === prevVal)) {
+                    $sel.val(prevVal);
+                }
+                $('#sc_member_select_wrap').show();
+                const avatar = $sel.val();
+                const preview = avatar ? assembleSummaryBlockForMember(avatar) : '';
+                $('#sc_preview').val(preview || '(empty — no summaries yet)');
+            } else {
+                $('#sc_member_select_wrap').show();
+                $('#sc_preview').val('(no members with summaries yet)');
+            }
+        } else {
+            $('#sc_member_select_wrap').hide();
+            const preview = assembleSummaryBlock();
+            $('#sc_preview').val(preview || '(empty — no summaries yet)');
+        }
 
         updateSnippetBrowser();
         updateCustomPromptSlots();
@@ -1820,7 +1858,12 @@ function updateCustomPromptSlots() {
 }
 
 function updateSnippetBrowser() {
-    const store = getChatStore();
+    const store = getActiveStore();
+    const presenceMode = isPresenceGroupMode();
+    if (presenceMode && !store) {
+        $('#sc_snippet_browser').html('<div class="sc-muted">Select a member with summaries above.</div>');
+        return;
+    }
     let html = '';
 
     if (!store.layers || store.layers.every(l => !l || l.length === 0)) {
@@ -1908,8 +1951,9 @@ function updateSnippetBrowser() {
     $('.sc-snippet-redo').off('click').on('click', async function () {
         const layerIdx = parseInt($(this).closest('.sc-snippet').data('layer'));
         const snippetIdx = parseInt($(this).closest('.sc-snippet').data('idx'));
-        const store = getChatStore();
-        const layer = store.layers[layerIdx];
+        const redoStore = getActiveStore();
+        if (!redoStore) return;
+        const layer = redoStore.layers[layerIdx];
         if (!layer || !layer[snippetIdx]) return;
 
         const sn = layer[snippetIdx];
@@ -1946,8 +1990,8 @@ function updateSnippetBrowser() {
             }
 
             const contextParts = [];
-            for (let i = store.layers.length - 1; i >= 0; i--) {
-                const l = store.layers[i];
+            for (let i = redoStore.layers.length - 1; i >= 0; i--) {
+                const l = redoStore.layers[i];
                 if (!l) continue;
                 for (let j = 0; j < l.length; j++) {
                     if (i === layerIdx && j === snippetIdx) continue;
@@ -2119,6 +2163,13 @@ function bindUIEvents() {
             'Summaryception',
             { timeOut: 5000 }
         );
+    });
+
+    $(document).on('change', '#sc_preview_member_select', function () {
+        updateSnippetBrowser();
+        const avatar = $(this).val();
+        const preview = avatar ? assembleSummaryBlockForMember(avatar) : '';
+        $('#sc_preview').val(preview || '(empty — no summaries yet)');
     });
 
     $(document).on('click', '#sc_repair', async function () {

@@ -349,6 +349,24 @@ async function onMessageReceivedPresence(messageIndex) {
     }
 }
 
+function assembleSummaryBlockForMember(avatar) {
+    const s = ctx.getSettings();
+    const store = getMemberStore(avatar);
+    if (!store || !store.layers || store.layers.every(l => !l || l.length === 0)) return '';
+    const context = buildFullContextForStore(store);
+    if (context === '(none yet)') return '';
+    return s.injectionTemplate.replace('{{summary}}', context);
+}
+
+function getMembersWithStores() {
+    if (!isPresenceGroupMode()) return [];
+    const members = getGroupMembers();
+    return members.filter(m => {
+        const ms = getMemberStore(m.avatar);
+        return ms && (ms.summarizedUpTo >= 0 || ms.layers.some(l => l && l.length > 0));
+    });
+}
+
 function initPresence(context) {
     ctx = context;
 
@@ -448,4 +466,6 @@ export {
     getMemberStoreKey,
     summarizeForMember,
     runParallelMemberCatchup,
+    assembleSummaryBlockForMember,
+    getMembersWithStores,
 };
