@@ -1833,6 +1833,7 @@ function updateUI() {
             $('#sc_preview').val(preview || '(empty — no summaries yet)');
         }
 
+        updatePreviewTokenCount($('#sc_preview').val());
         updateSnippetBrowser();
         updateCustomPromptSlots();
     } catch (e) {
@@ -1864,6 +1865,34 @@ function updateCustomPromptSlots() {
     } else {
         $('#sc_custom_prompt_manager').hide();
     }
+}
+
+async function updatePreviewTokenCount(text) {
+    const $badge = $('#sc_preview_token_count');
+    if (!text || text.startsWith('(')) {
+        $badge.text('');
+        return;
+    }
+    try {
+        const count = await SillyTavern.getContext().getTokenCountAsync(text);
+        $badge.text(`~${count.toLocaleString()} tokens`);
+    } catch { $badge.text(''); }
+}
+
+async function updateSnippetTokenCounts(store) {
+    const $tokens = $('.sc-snippet-tokens');
+    const promises = $tokens.toArray().map(async (el) => {
+        const $el = $(el);
+        const layerIdx = parseInt($el.data('layer'));
+        const snippetIdx = parseInt($el.data('idx'));
+        const layer = store.layers[layerIdx];
+        if (!layer || !layer[snippetIdx]) return;
+        try {
+            const count = await SillyTavern.getContext().getTokenCountAsync(layer[snippetIdx].text);
+            $el.text(`${count} tok`);
+        } catch { $el.text(''); }
+    });
+    await Promise.all(promises);
 }
 
 function updateSnippetBrowser() {
@@ -1898,7 +1927,7 @@ function updateSnippetBrowser() {
 
                 html += `<div class="sc-snippet" data-layer="${i}" data-idx="${j}">
                 <span class="sc-snippet-text" data-layer="${i}" data-idx="${j}" title="Click to edit">${escapeHtml(sn.text)}</span>
-                <span class="sc-snippet-meta">${rangeStr}${seedStr}</span>
+                <span class="sc-snippet-meta">${rangeStr}${seedStr} <span class="sc-snippet-tokens" data-layer="${i}" data-idx="${j}"></span></span>
                 ${redoBtn}
                 <button class="sc-snippet-delete menu_button fa-solid fa-xmark" title="Delete this snippet"></button>
                 </div>`;
@@ -1908,6 +1937,8 @@ function updateSnippetBrowser() {
     }
 
     $('#sc_snippet_browser').html(html);
+
+    updateSnippetTokenCounts(store);
 
     // Edit snippet on click
     $('.sc-snippet-text').off('click').on('click', function () {
@@ -2179,6 +2210,7 @@ function bindUIEvents() {
         const avatar = $(this).val();
         const preview = avatar ? assembleSummaryBlockForMember(avatar) : '';
         $('#sc_preview').val(preview || '(empty — no summaries yet)');
+        updatePreviewTokenCount($('#sc_preview').val());
     });
 
     $(document).on('click', '#sc_repair', async function () {

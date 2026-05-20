@@ -76,6 +76,20 @@
     font-size: 0.95em;
 }
 
+.sc-token-badge {
+    opacity: 0.5;
+    font-size: 0.8em;
+    font-weight: normal;
+    font-style: italic;
+    vertical-align: middle;
+}
+
+.sc-snippet-tokens {
+    opacity: 0.5;
+    font-size: 0.9em;
+    margin-left: 6px;
+}
+
 .sc-settings .sc-stats-box {
     padding: 8px 10px;
     border: 1px solid var(--SmartThemeBorderColor, #444);
