@@ -1,4 +1,22 @@
-# 🧠 Summaryception
+# 🧠 Summaryception — Deltinha Fork
+
+> **Fork of [Lodactio/Extension-Summaryception](https://github.com/Lodactio/Extension-Summaryception)** with Presence group chat support.
+
+### What this fork adds
+
+This fork extends Summaryception with deep integration for the [SillyTavern Presence](https://github.com/leandrojofre/SillyTavern-Presence) extension, enabling per-character memory banks in group chats where each member only summarizes conversations they were actually present for.
+
+| Feature | Description |
+|---|---|
+| **Per-member memory banks** | Each group member gets their own independent layered memory. When a character is drafted, only *their* summary is injected — no memory bleed between members. |
+| **Presence-aware filtering** | Summarization only processes messages where the character was marked as present (tracked by the Presence extension). A character who left the scene won't have gaps filled with events they didn't witness. |
+| **Omniscient members** | Characters with Presence's "Ignore Presence" toggle active bypass the presence filter entirely — they summarize **all** messages regardless of whether they were "in the room." Ideal for narrators, overseers, or all-knowing entities. |
+| **`{{char_name}}` macro** | The summarizer prompt supports `{{char_name}}`, resolved per-member so the LLM knows whose perspective it's summarizing. |
+| **Generate interceptor** | Summarized messages are stripped from the prompt context via SillyTavern's `generate_interceptor` API instead of ghosting — non-destructive and invisible to the LLM. |
+
+All upstream Summaryception features (layered summarization, ghost mode, backlog detection, connection settings, etc.) are unchanged.
+
+---
 
 ### Layered Recursive Memory for SillyTavern
 
@@ -248,17 +266,19 @@ Summaryception can use different backends for summarization, independent of your
 ### Requirements
 
 - **SillyTavern 1.16.0+** (release or staging). Older versions use an incompatible `generateRaw` signature and will not work correctly.
+- **[SillyTavern Presence](https://github.com/leandrojofre/SillyTavern-Presence)** — required for the per-character memory bank and group chat features to work.
 
 ### From SillyTavern UI
 1. Open **Extensions** → **Install Extension**
-2. Paste: `https://github.com/Lodactio/Extension-Summaryception`
+2. Paste: `https://github.com/Deltinha/Extension-Summaryception`
 3. Click Install
 4. Find **🧠 Summaryception** in Extensions settings
+5. Enable the **Presence Group Memory** toggle in Summaryception's settings
 
 ### Manual
 ```bash
 cd SillyTavern/data/default-user/extensions/third-party/
-git clone https://github.com/Lodactio/Extension-Summaryception
+git clone https://github.com/Deltinha/Extension-Summaryception
 ```
 Restart SillyTavern and enable the extension.
 
