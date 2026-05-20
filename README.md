@@ -1,4 +1,4 @@
-# 🧠 Summaryception — Deltinha Fork
+# 👁️ Summaryception — Presence Fork
 
 > **Fork of [Lodactio/Extension-Summaryception](https://github.com/Lodactio/Extension-Summaryception)** with Presence group chat support.
 
