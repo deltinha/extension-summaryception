@@ -98,6 +98,11 @@
     font-style: italic;
 }
 
+.sc-settings .sc-member-stat {
+    padding-left: 16px;
+    font-size: 0.85em;
+}
+
 .sc-settings .sc-button-row {
     display: flex;
     gap: 8px;

@@ -1,5 +1,5 @@
 /**
- * Summaryception v5.5.2 — Layered Recursive Summarization for SillyTavern
+ * Summaryception v5.6.0 — Layered Recursive Summarization for SillyTavern
  *
  * NON-DESTRUCTIVE: Uses SillyTavern's native /hide and /unhide commands
  * to exclude summarized messages from LLM context while keeping them
@@ -16,6 +16,15 @@ import {
     populateProfileDropdown,
     getConnectionDisplayName,
 } from './connectionutil.js';
+import {
+    initPresence,
+    isPresenceGroupMode,
+    getGroupMembers,
+    getMemberStore,
+    getMemberStoreKey,
+    summarizeForMember,
+    runParallelMemberCatchup,
+} from './presence.js';
 
 const MODULE_NAME = 'summaryception';
 const LOG_PREFIX = '[Summaryception]';
@@ -1484,6 +1493,11 @@ function updateInjection() {
             return;
         }
 
+        if (isPresenceGroupMode()) {
+            setExtensionPrompt(MODULE_NAME, '', 1, 0, false, 0);
+            return;
+        }
+
         const summaryBlock = assembleSummaryBlock();
         if (!summaryBlock) {
             setExtensionPrompt(MODULE_NAME, '', 1, 0, false, 0);
@@ -1508,7 +1522,11 @@ function onMessageReceived(messageIndex) {
         if (msg && !msg.is_user && !msg.is_system) {
             log('New assistant message at index', messageIndex);
             setTimeout(async () => {
-                await maybeSummarizeTurns();
+                if (isPresenceGroupMode()) {
+                    await onMessageReceivedPresence(messageIndex);
+                } else {
+                    await maybeSummarizeTurns();
+                }
                 updateInjection();
                 updateUI();
             }, 500);
@@ -1529,7 +1547,31 @@ function onChatChanged() {
 }
 
 function onGenerationStarted() {
+    if (isPresenceGroupMode()) return;
     updateInjection();
+}
+
+async function onMessageReceivedPresence(messageIndex) {
+    try {
+        const { chat } = SillyTavern.getContext();
+        const msg = chat[messageIndex];
+
+        const senderAvatar = msg.force_avatar
+            || (msg.name && SillyTavern.getContext().characters?.find(c => c?.name === msg.name)?.avatar)
+            || null;
+
+        const msgPresent = Array.isArray(msg.present) ? msg.present : [];
+        const members = getGroupMembers();
+        const membersToCheck = members.filter(m =>
+            msgPresent.includes(m.avatar) || m.avatar === senderAvatar
+        );
+
+        for (const member of membersToCheck) {
+            await maybeSummarizeForMember(member.avatar);
+        }
+    } catch (e) {
+        log('onMessageReceivedPresence error:', e);
+    }
 }
 
 // ─── Slash Commands ──────────────────────────────────────────────────
@@ -1550,12 +1592,26 @@ function registerSlashCommands() {
             callback: () => {
                 const store = getChatStore();
                 const lines = ['**Summaryception Status**'];
-                lines.push(`Summarized up to index: ${store.summarizedUpTo}`);
-                if (store.layers) {
-                    for (let i = 0; i < store.layers.length; i++) {
-                        const l = store.layers[i];
-                        if (l && l.length > 0) {
-                            lines.push(`Layer ${i}: ${l.length} snippets`);
+
+                if (isPresenceGroupMode()) {
+                    lines.push('Memory mode: **Presence group chat**');
+                    const members = getGroupMembers();
+                    lines.push(`Group members: ${members.length}`);
+                    for (const member of members) {
+                        const ms = getMemberStore(member.avatar);
+                        if (ms && (ms.summarizedUpTo >= 0 || ms.layers.some(l => l && l.length > 0))) {
+                            const snippetCount = ms.layers.reduce((sum, l) => sum + (l?.length || 0), 0);
+                            lines.push(`  ${member.name}: summarized up to ${ms.summarizedUpTo}, ${snippetCount} snippets`);
+                        }
+                    }
+                } else {
+                    lines.push(`Summarized up to index: ${store.summarizedUpTo}`);
+                    if (store.layers) {
+                        for (let i = 0; i < store.layers.length; i++) {
+                            const l = store.layers[i];
+                            if (l && l.length > 0) {
+                                lines.push(`Layer ${i}: ${l.length} snippets`);
+                            }
                         }
                     }
                 }
@@ -1567,6 +1623,28 @@ function registerSlashCommands() {
         SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             name: 'sc-clear',
             callback: async () => {
+                if (isPresenceGroupMode()) {
+                    const members = getGroupMembers();
+                    const { chatMetadata } = SillyTavern.getContext();
+                    const root = chatMetadata[MODULE_NAME];
+                    for (const member of members) {
+                        const key = getMemberStoreKey(member.avatar);
+                        if (root?.memories?.[key]) {
+                            root.memories[key] = { layers: [], summarizedUpTo: -1, ghostedIndices: [] };
+                        }
+                    }
+                    await saveChatStore();
+                    try {
+                        const ctx2 = SillyTavern.getContext();
+                        if (ctx2.saveChat) await ctx2.saveChat();
+                    } catch (e) {
+                        log('Could not save chat:', e);
+                    }
+                    updateInjection();
+                    updateUI();
+                    return 'All Presence member memories cleared.';
+                }
+
                 await unghostAllMessages();
 
                 const store = getChatStore();
@@ -1651,6 +1729,10 @@ function updateUI() {
         $('#sc_strip_patterns').val((s.stripPatterns || []).join('\n'));
         $('#sc_summarizer_response_length').val(s.summarizerResponseLength || 0);
 
+        const presenceActive = isPresenceGroupMode();
+        $('#sc_presence_group_memory').prop('checked', s.presenceGroupMemory);
+        $('.sc-presence-only').toggle(presenceActive);
+
         let ghostedCount = 0;
         try {
             const { chat } = SillyTavern.getContext();
@@ -1658,6 +1740,20 @@ function updateUI() {
         } catch (e) { /* no chat loaded */ }
 
         let statsHtml = '';
+        if (isPresenceGroupMode()) {
+            const members = getGroupMembers();
+            statsHtml += `<div class="sc-layer-stat">👥 <strong>Presence group chat mode</strong> — ${members.length} members</div>`;
+            for (const member of members) {
+                const ms = getMemberStore(member.avatar);
+                if (ms && (ms.summarizedUpTo >= 0 || ms.layers.some(l => l && l.length > 0))) {
+                    const snippetCount = ms.layers.reduce((sum, l) => sum + (l?.length || 0), 0);
+                    statsHtml += `<div class="sc-layer-stat sc-member-stat">
+                        <span class="sc-layer-label">${escapeHtml(member.name)}:</span>
+                        ${snippetCount} snippets · up to index ${ms.summarizedUpTo}
+                    </div>`;
+                }
+            }
+        } else {
         if (s.disableGhosting) {
             statsHtml += `<div class="sc-layer-stat">👻 <strong>${ghostedCount}</strong> messages ghosted (metadata only — not visually hidden)</div>`;
         } else {
@@ -1679,6 +1775,7 @@ function updateUI() {
         if (!store.layers?.length || store.layers.every(l => !l || l.length === 0)) {
             statsHtml = '<div class="sc-layer-stat sc-muted">No summaries yet for this chat.</div>';
         }
+        } // end else (non-Presence mode)
 
         $('#sc_layer_stats').html(statsHtml);
 
@@ -2005,6 +2102,21 @@ function bindUIEvents() {
         saveSettings();
     });
 
+    $(document).on('change', '#sc_presence_group_memory', async function () {
+        const s = getSettings();
+        s.presenceGroupMemory = $(this).prop('checked');
+        saveSettings();
+        updateInjection();
+        updateUI();
+        toastr.info(
+            s.presenceGroupMemory
+                ? 'Presence group chat memory enabled. Each member gets their own memory bank.'
+                : 'Presence group chat memory disabled.',
+            'Summaryception',
+            { timeOut: 5000 }
+        );
+    });
+
     $(document).on('click', '#sc_repair', async function () {
         const { chat } = SillyTavern.getContext();
         let repaired = 0;
@@ -2134,6 +2246,16 @@ function bindUIEvents() {
         if (s.pauseSummarization) {
             log('Force Summarize overrides pause mode.');
         }
+
+        if (isPresenceGroupMode()) {
+            const members = getGroupMembers();
+            toastr.info(`[Presence] Force-summarizing for ${members.length} members...`, 'Summaryception', { timeOut: 2000 });
+            await runParallelMemberCatchup(members);
+            updateInjection();
+            updateUI();
+            return;
+        }
+
         $(this).prop('disabled', true).text(' Working…');
         try {
             catchupDismissed = false;
@@ -2799,9 +2921,22 @@ async function fetchProfilesFallback(selectElement, currentValue) {
 
     registerSlashCommands();
 
+    initPresence({
+        getSettings,
+        MODULE_NAME,
+        saveChatStore,
+        callSummarizer,
+        log,
+        trace,
+        isSummarizing: () => isSummarizing,
+        setSummarizing: (v) => { isSummarizing = v; },
+        updateInjection,
+        updateUI,
+    });
+
     eventSource.on(event_types.APP_READY, () => {
         updateInjection();
         updateUI();
-        console.log(LOG_PREFIX, 'v5.5.2 loaded. Connection Settings available');
+        console.log(LOG_PREFIX, 'v5.6.0 loaded. Connection Settings + Presence integration available');
     });
 })();
