@@ -296,6 +296,11 @@ function getPlayerName() {
     return ctx.name1 || 'User';
 }
 
+function getCharName() {
+    const ctx = SillyTavern.getContext();
+    return ctx.name2 || 'Character';
+}
+
 // ─── Message Hiding (Ghosting via native /hide /unhide) ──────────────
 async function repairGhostingForRange(startIdx, endIdx) {
     trace('>>> ENTERING repairGhostingForRange');
@@ -779,7 +784,7 @@ function abortSummarization() {
 
 // ─── Core: LLM Summarization with Retry ──────────────────────────────
 
-async function callSummarizer(storyTxt, contextStr) {
+async function callSummarizer(storyTxt, contextStr, charNameOverride) {
     trace('>>> ENTERING callSummarizer');
     trace('  storyTxt length:', storyTxt?.length ?? 'UNDEFINED');
     trace('  contextStr length:', contextStr?.length ?? 'UNDEFINED');
@@ -792,6 +797,7 @@ async function callSummarizer(storyTxt, contextStr) {
 
     const prompt = s.summarizerUserPrompt
         .replace('{{player_name}}', getPlayerName())
+        .replace('{{char_name}}', charNameOverride || getCharName())
         .replace('{{context_str}}', contextStr || '(none yet)')
         .replace('{{story_txt}}', storyTxt);
 

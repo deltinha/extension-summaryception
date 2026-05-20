@@ -117,7 +117,7 @@ async function maybePromoteLayerForStore(store, layerIndex, charName) {
         { timeOut: 3000, progressBar: true }
     );
 
-    const metaSummary = await ctx.callSummarizer(storyTxt, contextStr);
+    const metaSummary = await ctx.callSummarizer(storyTxt, contextStr, charName);
     if (!metaSummary) {
         layer.unshift(...toMerge);
         return;
@@ -215,7 +215,7 @@ async function summarizeForMember(memberAvatar, memberName, opts = {}) {
             progressBar: true,
         });
 
-        const summary = await ctx.callSummarizer(storyTxt, contextStr);
+        const summary = await ctx.callSummarizer(storyTxt, contextStr, memberName);
         if (!summary) {
             ctx.log(`[Presence] ${memberName}: summarization failed, leaving turns intact`);
             return false;
