@@ -19,6 +19,11 @@ function isPresenceGroupMode() {
     return true;
 }
 
+function isOmniscientMember(avatar) {
+    const { chatMetadata } = SillyTavern.getContext();
+    return chatMetadata.ignore_presence?.includes(avatar) ?? false;
+}
+
 function getGroupMembers() {
     const stCtx = SillyTavern.getContext();
     const groupId = stCtx.groupId ?? stCtx.selected_group;
@@ -165,8 +170,10 @@ async function summarizeForMember(memberAvatar, memberName, opts = {}) {
         if (!m || !m.mes || !m.mes.trim()) continue;
         if (m.is_user) continue;
         if (i <= store.summarizedUpTo) continue;
-        if (Array.isArray(m.present)) {
-            if (!m.present.includes(charAvatar) && !m.present.includes('presence_universal_tracker')) continue;
+        if (!isOmniscientMember(charAvatar)) {
+            if (Array.isArray(m.present)) {
+                if (!m.present.includes(charAvatar) && !m.present.includes('presence_universal_tracker')) continue;
+            }
         }
         presentTurns.push({ index: i, mes: m.mes, name: m.name || memberName });
     }
@@ -265,8 +272,10 @@ async function maybeSummarizeForMember(memberAvatar) {
         if (!m || !m.mes || !m.mes.trim()) continue;
         if (m.is_user) continue;
         if (i <= summarizedUpTo) continue;
-        if (Array.isArray(m.present)) {
-            if (!m.present.includes(memberAvatar) && !m.present.includes('presence_universal_tracker')) continue;
+        if (!isOmniscientMember(memberAvatar)) {
+            if (Array.isArray(m.present)) {
+                if (!m.present.includes(memberAvatar) && !m.present.includes('presence_universal_tracker')) continue;
+            }
         }
         presentTurns.push({ index: i, mes: m.mes, name: m.name || member.name });
     }
@@ -292,8 +301,10 @@ async function runParallelMemberCatchup(members) {
             if (!m || !m.mes || !m.mes.trim()) continue;
             if (m.is_user) continue;
             if (i <= summarizedUpTo) continue;
-            if (Array.isArray(m.present)) {
-                if (!m.present.includes(member.avatar) && !m.present.includes('presence_universal_tracker')) continue;
+            if (!isOmniscientMember(member.avatar)) {
+                if (Array.isArray(m.present)) {
+                    if (!m.present.includes(member.avatar) && !m.present.includes('presence_universal_tracker')) continue;
+                }
             }
             presentCount++;
         }
@@ -328,7 +339,7 @@ function buildPresencePassage(chat, startIdx, endIdx, charAvatar) {
             continue;
         }
 
-        if (charAvatar && Array.isArray(m.present)) {
+        if (charAvatar && Array.isArray(m.present) && !isOmniscientMember(charAvatar)) {
             if (!m.present.includes(charAvatar) && !m.present.includes('presence_universal_tracker')) {
                 continue;
             }
@@ -351,7 +362,7 @@ async function onMessageReceivedPresence(messageIndex) {
 
     const members = getGroupMembers();
     const membersToCheck = members.filter(m =>
-        msgPresent.includes(m.avatar) || m.avatar === senderAvatar
+        msgPresent.includes(m.avatar) || m.avatar === senderAvatar || isOmniscientMember(m.avatar)
     );
 
     for (const member of membersToCheck) {
