@@ -1001,8 +1001,22 @@ async function summarizeOneBatch(visibleTurns) {
     const { chat } = SillyTavern.getContext();
     const store = getChatStore();
 
-    const batchSize = Math.min(s.turnsPerSummary, visibleTurns.length);
-    const batch = visibleTurns.slice(0, batchSize);
+    const eligibleTurns = visibleTurns.filter(t => t.index > store.summarizedUpTo);
+    trace('  eligibleTurns after filtering:', eligibleTurns.length);
+
+    if (eligibleTurns.length === 0) {
+        log('All visible turns are already summarized — repairing ghosting...');
+        const turnsToGhost = visibleTurns.filter(t => t.index <= store.summarizedUpTo);
+        for (const t of turnsToGhost) {
+            await ghostMessage(t.index);
+        }
+        await saveChatStore();
+        trace('<<< EXITING summarizeOneBatch - REPAIRED GHOSTING');
+        return false;
+    }
+
+    const batchSize = Math.min(s.turnsPerSummary, eligibleTurns.length);
+    const batch = eligibleTurns.slice(0, batchSize);
 
     if (batch.length === 0) {
         trace('<<< EXITING summarizeOneBatch - EMPTY BATCH');
@@ -1019,18 +1033,8 @@ async function summarizeOneBatch(visibleTurns) {
 
         log(`Summarizing ${batch.length} assistant turns (indices ${startIdx}–${endIdx})`);
 
-        // ─── FIX: Ensure batch is actually after the summarized point ───
-        if (startIdx <= store.summarizedUpTo) {
-            log(`Skipping batch: startIdx (${startIdx}) is <= summarizedUpTo (${store.summarizedUpTo})`);
-            trace('<<< EXITING summarizeOneBatch - BATCH ALREADY SUMMARIZED');
-            return false;
-        }
-
         if (!store.layers[0]) store.layers[0] = [];
-        const passageStart = Math.max(
-            batch[0].index,
-            store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1
-        );
+        const passageStart = store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1;
 
         // ─── SANITY CHECK ───
         if (passageStart > endIdx) {
@@ -1102,8 +1106,22 @@ async function summarizeOneBatchFromTurns(visibleTurns) {
     const { chat } = SillyTavern.getContext();
     const store = getChatStore();
 
-    const batchSize = Math.min(s.turnsPerSummary, visibleTurns.length);
-    const batch = visibleTurns.slice(0, batchSize);
+    const eligibleTurns = visibleTurns.filter(t => t.index > store.summarizedUpTo);
+    trace('  eligibleTurns after filtering:', eligibleTurns.length);
+
+    if (eligibleTurns.length === 0) {
+        log('All visible turns are already summarized — repairing ghosting...');
+        const turnsToGhost = visibleTurns.filter(t => t.index <= store.summarizedUpTo);
+        for (const t of turnsToGhost) {
+            await ghostMessage(t.index);
+        }
+        await saveChatStore();
+        trace('<<< EXITING summarizeOneBatchFromTurns - REPAIRED GHOSTING');
+        return false;
+    }
+
+    const batchSize = Math.min(s.turnsPerSummary, eligibleTurns.length);
+    const batch = eligibleTurns.slice(0, batchSize);
 
     trace('  batchSize:', batchSize);
     trace('  batch prepared:', batch.length);
@@ -1119,21 +1137,9 @@ async function summarizeOneBatchFromTurns(visibleTurns) {
     trace('  startIdx:', startIdx, 'endIdx:', endIdx);
     trace('  store.summarizedUpTo:', store.summarizedUpTo);
 
-    // ─── FIX: Ensure batch is actually after the summarized point ───
-    // If this batch starts BEFORE summarizedUpTo, skip it entirely
-    if (startIdx <= store.summarizedUpTo) {
-        trace('  SKIP: batch startIdx (' + startIdx + ') is <= summarizedUpTo (' + store.summarizedUpTo + ')');
-        trace('<<< EXITING - batch is before summarized point');
-        return false;
-    }
-
     if (!store.layers[0]) store.layers[0] = [];
 
-    // ─── FIX: Start from the message AFTER the last summarized one ───
-    const passageStart = Math.max(
-        batch[0].index,
-        store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1
-    );
+    const passageStart = store.summarizedUpTo < 0 ? 0 : store.summarizedUpTo + 1;
 
     trace('  passageStart:', passageStart, 'endIdx:', endIdx);
 
