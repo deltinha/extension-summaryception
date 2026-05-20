@@ -1,5 +1,5 @@
 /**
- * Summaryception v5.6.0 — Layered Recursive Summarization for SillyTavern
+ * Summaryception v5.7.1 — Layered Recursive Summarization for SillyTavern
  *
  * NON-DESTRUCTIVE: Uses SillyTavern's native /hide and /unhide commands
  * to exclude summarized messages from LLM context while keeping them
@@ -26,6 +26,8 @@ import {
     runParallelMemberCatchup,
     assembleSummaryBlockForMember,
     getMembersWithStores,
+    cancelPresenceCatchup,
+    isPresenceCatchupRunning,
 } from './presence.js';
 
 const MODULE_NAME = 'summaryception';
@@ -780,6 +782,7 @@ function abortSummarization() {
         log('Abort signal sent.');
     }
     isSummarizing = false;
+    cancelPresenceCatchup();
 }
 
 // ─── Core: LLM Summarization with Retry ──────────────────────────────
@@ -2389,7 +2392,7 @@ function bindUIEvents() {
     });
 
     $(document).on('click', '#sc_stop_summarize', function () {
-        if (!isSummarizing && !currentAbortController) {
+        if (!isSummarizing && !currentAbortController && !isPresenceCatchupRunning()) {
             toastr.info('Nothing is running.', 'Summaryception');
             return;
         }
@@ -2998,6 +3001,6 @@ async function fetchProfilesFallback(selectElement, currentValue) {
     eventSource.on(event_types.APP_READY, () => {
         updateInjection();
         updateUI();
-        console.log(LOG_PREFIX, 'v5.6.0 loaded. Connection Settings + Presence integration available');
+        console.log(LOG_PREFIX, 'v5.7.1 loaded. Connection Settings + Presence integration available');
     });
 })();

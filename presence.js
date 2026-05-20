@@ -9,6 +9,16 @@
  */
 
 let ctx = null;
+let _presenceCancelled = false;
+let _presenceCatchupActive = false;
+
+function cancelPresenceCatchup() {
+    _presenceCancelled = true;
+}
+
+function isPresenceCatchupRunning() {
+    return _presenceCatchupActive;
+}
 
 function isPresenceGroupMode() {
     const s = ctx.getSettings();
@@ -290,38 +300,52 @@ async function maybeSummarizeForMember(memberAvatar) {
 }
 
 async function runParallelMemberCatchup(members) {
-    const { chat } = SillyTavern.getContext();
+    _presenceCancelled = false;
+    _presenceCatchupActive = true;
 
-    for (const member of members) {
-        const ms = getMemberStore(member.avatar);
-        const summarizedUpTo = ms ? ms.summarizedUpTo : -1;
-        let presentCount = 0;
-        for (let i = 0; i < chat.length; i++) {
-            const m = chat[i];
-            if (!m || !m.mes || !m.mes.trim()) continue;
-            if (m.is_user) continue;
-            if (i <= summarizedUpTo) continue;
-            if (!isOmniscientMember(member.avatar)) {
-                if (Array.isArray(m.present)) {
-                    if (!m.present.includes(member.avatar) && !m.present.includes('presence_universal_tracker')) continue;
-                }
-            }
-            presentCount++;
-        }
+    try {
+        const { chat } = SillyTavern.getContext();
 
-        if (presentCount === 0) continue;
-
-        let consecutiveFailures = 0;
-        while (consecutiveFailures < 3) {
-            const success = await summarizeForMember(member.avatar, member.name);
-            if (success) {
-                consecutiveFailures = 0;
-            } else {
-                consecutiveFailures++;
+        for (const member of members) {
+            if (_presenceCancelled) {
+                ctx.log('[Presence] Catchup cancelled by user.');
                 break;
             }
-            await new Promise(r => setTimeout(r, 200));
+
+            const ms = getMemberStore(member.avatar);
+            const summarizedUpTo = ms ? ms.summarizedUpTo : -1;
+            let presentCount = 0;
+            for (let i = 0; i < chat.length; i++) {
+                const m = chat[i];
+                if (!m || !m.mes || !m.mes.trim()) continue;
+                if (m.is_user) continue;
+                if (i <= summarizedUpTo) continue;
+                if (!isOmniscientMember(member.avatar)) {
+                    if (Array.isArray(m.present)) {
+                        if (!m.present.includes(member.avatar) && !m.present.includes('presence_universal_tracker')) continue;
+                    }
+                }
+                presentCount++;
+            }
+
+            if (presentCount === 0) continue;
+
+            let consecutiveFailures = 0;
+            while (consecutiveFailures < 3 && !_presenceCancelled) {
+                const success = await summarizeForMember(member.avatar, member.name);
+                if (_presenceCancelled) break;
+                if (success) {
+                    consecutiveFailures = 0;
+                } else {
+                    consecutiveFailures++;
+                    break;
+                }
+                await new Promise(r => setTimeout(r, 200));
+            }
         }
+    } finally {
+        _presenceCatchupActive = false;
+        _presenceCancelled = false;
     }
 }
 
@@ -489,4 +513,6 @@ export {
     runParallelMemberCatchup,
     assembleSummaryBlockForMember,
     getMembersWithStores,
+    cancelPresenceCatchup,
+    isPresenceCatchupRunning,
 };
