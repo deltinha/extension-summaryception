@@ -1735,9 +1735,7 @@ function updateUI() {
         $('#sc_strip_patterns').val((s.stripPatterns || []).join('\n'));
         $('#sc_summarizer_response_length').val(s.summarizerResponseLength || 0);
 
-        const presenceActive = isPresenceGroupMode();
         $('#sc_presence_group_memory').prop('checked', s.presenceGroupMemory);
-        $('.sc-presence-only').toggle(presenceActive);
 
         let ghostedCount = 0;
         try {
