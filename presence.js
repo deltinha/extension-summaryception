@@ -171,7 +171,10 @@ async function summarizeForMember(memberAvatar, memberName, opts = {}) {
         presentTurns.push({ index: i, mes: m.mes, name: m.name || memberName });
     }
 
-    const summarizeThreshold = s.verbatimTurns + s.turnsPerSummary;
+    // Presence mode doesn't ghost messages (uses interceptor instead),
+    // so the verbatimTurns buffer doesn't apply to the trigger threshold.
+    // Summarize as soon as we have enough turns for one batch.
+    const summarizeThreshold = s.turnsPerSummary;
 
     if (presentTurns.length < summarizeThreshold && !opts.force) {
         return false;
@@ -268,7 +271,9 @@ async function maybeSummarizeForMember(memberAvatar) {
         presentTurns.push({ index: i, mes: m.mes, name: m.name || member.name });
     }
 
-    const threshold = s.verbatimTurns + s.turnsPerSummary;
+    // Presence mode uses the interceptor (no ghosting), so the verbatimTurns
+    // buffer doesn't apply. Trigger when we have enough for one batch.
+    const threshold = s.turnsPerSummary;
 
     if (presentTurns.length >= threshold) {
         await summarizeForMember(memberAvatar, member.name);
