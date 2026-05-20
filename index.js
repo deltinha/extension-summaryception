@@ -1,5 +1,5 @@
 /**
- * Summaryception v5.7.1 — Layered Recursive Summarization for SillyTavern
+ * Summaryception v5.7.2 — Layered Recursive Summarization for SillyTavern
  *
  * NON-DESTRUCTIVE: Uses SillyTavern's native /hide and /unhide commands
  * to exclude summarized messages from LLM context while keeping them
@@ -2243,6 +2243,29 @@ function bindUIEvents() {
     $(document).on('click', '#sc_clear_memory', async function () {
         if (!confirm('Clear ALL Summaryception memory for this chat and unghost all messages?')) return;
 
+        if (isPresenceGroupMode()) {
+            const members = getGroupMembers();
+            const { chatMetadata } = SillyTavern.getContext();
+            const root = chatMetadata[MODULE_NAME];
+            for (const member of members) {
+                const key = getMemberStoreKey(member.avatar);
+                if (root?.memories?.[key]) {
+                    root.memories[key] = { layers: [], summarizedUpTo: -1, ghostedIndices: [] };
+                }
+            }
+            await saveChatStore();
+            try {
+                const ctx2 = SillyTavern.getContext();
+                if (ctx2.saveChat) await ctx2.saveChat();
+            } catch (e) {
+                log('Could not save chat:', e);
+            }
+            updateInjection();
+            updateUI();
+            toastr.success('All Presence member memories cleared.', 'Summaryception');
+            return;
+        }
+
         try {
             await unghostAllMessages();
         } catch (e) {
@@ -3001,6 +3024,6 @@ async function fetchProfilesFallback(selectElement, currentValue) {
     eventSource.on(event_types.APP_READY, () => {
         updateInjection();
         updateUI();
-        console.log(LOG_PREFIX, 'v5.7.1 loaded. Connection Settings + Presence integration available');
+        console.log(LOG_PREFIX, 'v5.7.2 loaded. Connection Settings + Presence integration available');
     });
 })();
