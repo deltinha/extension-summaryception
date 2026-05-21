@@ -489,3 +489,34 @@
     flex-direction: column;
     gap: 6px;
 }
+
+/* ─── Prompt Preview Modal ─────────────────────────────────────── */
+
+.sc-prompt-preview-section {
+    margin-bottom: 16px;
+}
+
+.sc-prompt-preview-section:last-child {
+    margin-bottom: 0;
+}
+
+.sc-prompt-preview-label {
+    font-weight: bold;
+    font-size: 0.9em;
+    opacity: 0.75;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sc-prompt-preview .sc-textarea {
+    width: 100%;
+    resize: vertical;
+    font-family: monospace;
+    font-size: 0.82em;
+    line-height: 1.4;
+}
+
+.sc-prompt-preview .sc-preview {
+    cursor: default;
+}

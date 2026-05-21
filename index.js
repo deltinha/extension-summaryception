@@ -29,6 +29,7 @@ import {
     cancelPresenceCatchup,
     isPresenceCatchupRunning,
 } from './presence.js';
+import { initPromptPreview, maybePreviewPrompt } from './promptPreview.js';
 
 const MODULE_NAME = 'summaryception';
 const LOG_PREFIX = '[Summaryception]';
@@ -86,6 +87,7 @@ Write in short phrases, no more than 20; output must be a single line:`,
 
     debugMode: false,
     traceMode: false,
+    previewPrompt: false,
 
     // ─── Connection Settings ─────────────────────────────────────
     connectionSource: 'default',          // 'default' | 'profile' | 'ollama' | 'openai'
@@ -803,6 +805,8 @@ async function callSummarizer(storyTxt, contextStr, charNameOverride) {
         .replace('{{char_name}}', charNameOverride || getCharName())
         .replace('{{context_str}}', contextStr || '(none yet)')
         .replace('{{story_txt}}', storyTxt);
+
+    if (!await maybePreviewPrompt(s, prompt)) return '';
 
     log('── Summarizer Call ──');
     log('Context str length:', contextStr.length, 'chars');
@@ -1756,6 +1760,7 @@ function updateUI() {
         $('#sc_prompt_preset').val(s.promptPreset);
         $('#sc_debug_mode').prop('checked', s.debugMode);
         $('#sc_trace_mode').prop('checked', s.traceMode);
+        $('#sc_preview_prompt').prop('checked', s.previewPrompt);
         $('#sc_strip_patterns').val((s.stripPatterns || []).join('\n'));
         $('#sc_summarizer_response_length').val(s.summarizerResponseLength || 0);
 
@@ -2187,6 +2192,11 @@ function bindUIEvents() {
 
     $(document).on('change', '#sc_trace_mode', function () {
         getSettings().traceMode = $(this).prop('checked');
+        saveSettings();
+    });
+
+    $(document).on('change', '#sc_preview_prompt', function () {
+        getSettings().previewPrompt = $(this).prop('checked');
         saveSettings();
     });
 
@@ -2739,6 +2749,7 @@ function bindUIEvents() {
         // Reset debug
         s.debugMode = defaultSettings.debugMode;
         s.traceMode = defaultSettings.traceMode;
+        s.previewPrompt = defaultSettings.previewPrompt;
 
         saveSettings();
         updateInjection();
@@ -3052,6 +3063,8 @@ async function fetchProfilesFallback(selectElement, currentValue) {
         updateInjection,
         updateUI,
     });
+
+    initPromptPreview({ abortSummarization, log });
 
     eventSource.on(event_types.APP_READY, () => {
         updateInjection();
