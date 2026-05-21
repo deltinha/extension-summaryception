@@ -19,6 +19,7 @@ import {
 import {
     initPresence,
     isPresenceGroupMode,
+    isOmniscientMember,
     getGroupMembers,
     getMemberStore,
     getMemberStoreKey,
@@ -1598,7 +1599,7 @@ async function onMessageReceivedPresence(messageIndex) {
         const msgPresent = Array.isArray(msg.present) ? msg.present : [];
         const members = getGroupMembers();
         const membersToCheck = members.filter(m =>
-            msgPresent.includes(m.avatar) || m.avatar === senderAvatar
+            msgPresent.includes(m.avatar) || m.avatar === senderAvatar || isOmniscientMember(m.avatar)
         );
 
         for (const member of membersToCheck) {
