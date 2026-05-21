@@ -28,6 +28,7 @@ import {
     getMembersWithStores,
     cancelPresenceCatchup,
     isPresenceCatchupRunning,
+    buildPresencePassage,
 } from './presence.js';
 import { initPromptPreview, maybePreviewPrompt } from './promptPreview.js';
 
@@ -2027,7 +2028,29 @@ function updateSnippetBrowser() {
         btn.prop('disabled', true).removeClass('fa-rotate-right').addClass('fa-spinner fa-spin');
 
         try {
-            const storyTxt = buildPassageFromRange(chat, rangeStart, rangeEnd);
+            const presenceMode = isPresenceGroupMode();
+            let memberName = null;
+            let memberAvatar = null;
+
+            if (presenceMode) {
+                const avatar = getSelectedMemberAvatar();
+                if (avatar) {
+                    const members = getGroupMembers();
+                    const member = members.find(m => m.avatar === avatar);
+                    if (member) {
+                        memberName = member.name;
+                        memberAvatar = avatar;
+                    }
+                }
+                if (!memberName) {
+                    toastr.warning('Select a member with summaries above to regenerate.', 'Summaryception');
+                    return;
+                }
+            }
+
+            const storyTxt = presenceMode && memberAvatar
+                ? buildPresencePassage(chat, rangeStart, rangeEnd, memberAvatar)
+                : buildPassageFromRange(chat, rangeStart, rangeEnd);
 
             if (!storyTxt.trim()) {
                 toastr.error('Source turns are empty — cannot regenerate.', 'Summaryception');
@@ -2050,7 +2073,7 @@ function updateSnippetBrowser() {
                 progressBar: true,
             });
 
-            const newSummary = await callSummarizer(storyTxt, contextStr);
+            const newSummary = await callSummarizer(storyTxt, contextStr, memberName || undefined);
 
             if (!newSummary) {
                 toastr.error('Regeneration failed — original snippet kept.', 'Summaryception');

@@ -523,4 +523,5 @@ export {
     getMembersWithStores,
     cancelPresenceCatchup,
     isPresenceCatchupRunning,
+    buildPresencePassage,
 };
