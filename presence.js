@@ -191,17 +191,22 @@ async function summarizeForMember(memberAvatar, memberName, opts = {}) {
         presentTurns.push({ index: i, mes: m.mes, name: m.name || memberName });
     }
 
-    // Presence mode doesn't ghost messages (uses interceptor instead),
-    // so the verbatimTurns buffer doesn't apply to the trigger threshold.
-    // Summarize as soon as we have enough turns for one batch.
+    // Respect verbatimTurns: keep the last N present turns unsummarized.
+    // These turns stay in-context via the interceptor, ensuring the most
+    // recent N assistant responses are always available verbatim.
+    const verbatimBuffer = s.verbatimTurns;
+    const summarizableTurns = presentTurns.length > verbatimBuffer
+        ? presentTurns.slice(0, presentTurns.length - verbatimBuffer)
+        : [];
+
     const summarizeThreshold = s.turnsPerSummary;
 
-    if (presentTurns.length < summarizeThreshold && !opts.force) {
+    if (summarizableTurns.length < summarizeThreshold && !opts.force) {
         return false;
     }
 
     const batchSize = s.turnsPerSummary;
-    const batch = presentTurns.slice(0, batchSize);
+    const batch = summarizableTurns.slice(0, batchSize);
     if (batch.length === 0) return false;
 
     ctx.setSummarizing(true);
@@ -293,11 +298,11 @@ async function maybeSummarizeForMember(memberAvatar) {
         presentTurns.push({ index: i, mes: m.mes, name: m.name || member.name });
     }
 
-    // Presence mode uses the interceptor (no ghosting), so the verbatimTurns
-    // buffer doesn't apply. Trigger when we have enough for one batch.
+    // Respect verbatimTurns: only trigger when there are turns beyond the buffer.
+    const summarizableCount = Math.max(0, presentTurns.length - s.verbatimTurns);
     const threshold = s.turnsPerSummary;
 
-    if (presentTurns.length >= threshold) {
+    if (summarizableCount >= threshold) {
         await summarizeForMember(memberAvatar, member.name);
     }
 }

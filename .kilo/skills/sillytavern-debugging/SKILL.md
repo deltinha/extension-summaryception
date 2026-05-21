@@ -104,6 +104,48 @@ document.querySelector('#rm_button_selected_ch h2')?.textContent;
    - `#extensions_settings2` — right column (Summaryception, translation, regex, etc.)
 3. Each extension is an `.inline-drawer` — click the header row to expand/collapse it.
 
+### ⚠️ Critical: Two-Step Opening via CDP
+
+Extension panels are **collapsed by default**. You must open the extensions drawer first, then expand the target extension.
+
+**Use `element.click()` via `js()` as the primary interaction method.** SillyTavern is a static SPA — all DOM elements exist after the initial load, so `.click()` works regardless of scroll position, viewport size, or visibility. Reserve `click_at_xy()` as a fallback for canvas elements or edge cases where synthetic clicks don't register.
+
+```python
+# browser-harness snippet — open a specific extension's settings panel
+import json, time
+
+# Step 1: Open the extensions drawer
+js("document.querySelector('#extensions-settings-button').click()")
+time.sleep(1)
+
+# Step 2: Expand a specific extension by matching header text
+# Replace 'summaryception' with the target extension name (case-insensitive)
+js("""
+    (function() {
+        var toggles = document.querySelectorAll('.inline-drawer-toggle');
+        for (var t of toggles) {
+            if (t.textContent.toLowerCase().includes('summaryception')) {
+                t.click();
+                return 'clicked';
+            }
+        }
+        return 'not found';
+    })();
+""")
+time.sleep(0.5)
+
+# Step 3: Now interact with elements inside the extension panel via .click()
+# e.g., click the Force Summarize button:
+js("document.querySelector('#sc_force_summarize').click()")
+```
+
+Key points:
+- **Always prefer `.click()` via `js()`** over `click_at_xy()` — it's faster, more reliable, and doesn't depend on viewport geometry
+- Open `#extensions-settings-button` **first** — the parent drawer must be open before extension toggles respond to clicks
+- Then click `.inline-drawer-toggle` elements matching the extension's header text
+- The toggle text often includes emoji prefixes (e.g., "🧠 Summaryception") — use case-insensitive `.includes()` matching
+- Use `click_at_xy()` only as a fallback when `.click()` doesn't work (e.g., canvas, complex overlay elements)
+
 ### Finding Summaryception Settings
 
 - **Container:** `.sc-settings` (inside `#extensions_settings2`)
@@ -122,6 +164,73 @@ document.querySelector('#rm_button_selected_ch h2')?.textContent;
 - **Container:** `#presence-settings` (inside `#extensions_settings`)
 - **Header text:** "Presence"
 - Settings include: enable/disable, tracker location, debug mode, configuration check
+
+### Common CDP Workflow: Open Group Chat → Open Extension Panel
+
+The most common debugging workflow combines group chat navigation with extension panel interaction. Use `.click()` for everything — no coordinate clicks needed:
+
+```python
+# browser-harness snippet — full workflow
+import json, time
+
+# 1. Open a group chat by group ID (if it's in the hotswap bar)
+js("""
+    (function() {
+        var el = document.querySelector('.hotswap [data-grid="GROUP_ID_HERE"]');
+        if (el) { el.click(); return 'clicked'; }
+        return 'not found';
+    })();
+""")
+time.sleep(2)
+
+# 2. Verify the correct chat is open
+chat_info = js("""
+    (function() {
+        var ctx = SillyTavern.getContext();
+        return JSON.stringify({groupId: ctx.groupId, chatLength: ctx.chat?.length});
+    })();
+""")
+print(chat_info)
+
+# 3. Open extensions drawer and expand target extension
+js("document.querySelector('#extensions-settings-button').click()")
+time.sleep(1)
+js("""
+    (function() {
+        var toggles = document.querySelectorAll('.inline-drawer-toggle');
+        for (var t of toggles) {
+            if (t.textContent.toLowerCase().includes('summaryception')) {
+                t.click(); return 'clicked';
+            }
+        }
+        return 'not found';
+    })();
+""")
+time.sleep(0.5)
+
+# 4. Interact with extension buttons/controls
+js("document.querySelector('#sc_force_summarize').click()")
+```
+
+For groups not in the hotswap bar, open the right nav panel and search the full character list:
+
+```python
+# Open right nav panel, then click the group by name
+js("document.querySelector('#rightNavDrawerIcon').click()")
+time.sleep(1)
+js("""
+    (function() {
+        var groups = document.querySelectorAll('.group_select');
+        for (var g of groups) {
+            var name = g.querySelector('.ch_name');
+            if (name && name.textContent.includes('GROUP_NAME_HERE')) {
+                g.click(); return 'clicked: ' + name.textContent;
+            }
+        }
+        return 'not found';
+    })();
+""")
+```
 
 ### Wand Menu (Quick Actions)
 

@@ -1,5 +1,5 @@
 /**
- * Summaryception v5.7.3 — Layered Recursive Summarization for SillyTavern
+ * Summaryception v5.7.4 — Layered Recursive Summarization for SillyTavern
  *
  * NON-DESTRUCTIVE: Uses SillyTavern's native /hide and /unhide commands
  * to exclude summarized messages from LLM context while keeping them
@@ -3056,6 +3056,6 @@ async function fetchProfilesFallback(selectElement, currentValue) {
     eventSource.on(event_types.APP_READY, () => {
         updateInjection();
         updateUI();
-        console.log(LOG_PREFIX, 'v5.7.3 loaded. Connection Settings + Presence integration available');
+        console.log(LOG_PREFIX, 'v5.7.4 loaded. Connection Settings + Presence integration available');
     });
 })();
