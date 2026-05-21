@@ -364,20 +364,17 @@ function buildPresencePassage(chat, startIdx, endIdx, charAvatar) {
         if (!m) continue;
         if (!m.mes || !m.mes.trim()) continue;
 
-        // Always include user messages — they provide essential context
-        // and should never be filtered by the Presence present array.
-        if (m.is_user) {
-            lines.push(`Player: ${m.mes.trim()}`);
-            continue;
-        }
-
+        // Filter both user and assistant messages by the character's presence.
+        // User messages carry a present array too (set by Presence) and must be
+        // filtered so a character only receives context from scenes they were in.
         if (charAvatar && Array.isArray(m.present) && !isOmniscientMember(charAvatar)) {
             if (!m.present.includes(charAvatar) && !m.present.includes('presence_universal_tracker')) {
                 continue;
             }
         }
 
-        lines.push(`Assistant: ${m.mes.trim()}`);
+        const speaker = m.is_user ? 'Player' : 'Assistant';
+        lines.push(`${speaker}: ${m.mes.trim()}`);
     }
     return lines.join('\n');
 }
