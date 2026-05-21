@@ -6,7 +6,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "Deltinha",
-    "version": "5.7.2",
+    "version": "5.7.3",
     "homePage": "https://github.com/Lodactio/Extension-Summaryception",
     "auto_update": true,
     "generate_interceptor": "summaryceptionInterceptor"

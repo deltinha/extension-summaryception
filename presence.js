@@ -162,7 +162,10 @@ async function summarizeForMember(memberAvatar, memberName, opts = {}) {
 
     const { chat, chatMetadata } = SillyTavern.getContext();
     const root = chatMetadata[ctx.MODULE_NAME];
-    if (!root?.memories) return false;
+    if (!root) return false;
+    if (!root.memories) {
+        root.memories = {};
+    }
 
     const key = getMemberStoreKey(memberAvatar);
     let store = root.memories[key];
